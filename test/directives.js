@@ -797,6 +797,81 @@ type User {
   })
 })
 
+test('should support skip directive in fragments', async t => {
+  t.plan(1)
+
+  const schema = `
+type Query {
+  me: User
+}
+
+type User {
+  id: ID!
+  name: String!
+}`
+
+  const resolvers = {
+    Query: {
+      me: (root, args, context, info) => {
+        return {
+          id: 'u1',
+          name: 'John'
+        }
+      }
+    }
+  }
+
+  const app = Fastify()
+  t.teardown(app.close.bind(app))
+  await app.register(mercurius, { schema, resolvers })
+
+  const variables = {
+    shouldSkip: true
+  }
+  const query = `
+    fragment UserDetail on User {
+      name @skip(if: $shouldSkip)
+    }
+  
+    query GetMe($shouldSkip: Boolean!) {
+      me {
+        id
+        ...UserDetail
+      }
+    }`
+
+  const res1 = await app.inject({
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    url: '/graphql',
+    body: JSON.stringify({ query, variables })
+  })
+
+  t.same(JSON.parse(res1.body), {
+    data: {
+      me: {
+        id: 'u1'
+      }
+    }
+  })
+
+  // And then if I make another request, I expect the same result
+  const res2 = await app.inject({
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    url: '/graphql',
+    body: JSON.stringify({ query, variables })
+  })
+
+  t.same(JSON.parse(res2.body), {
+    data: {
+      me: {
+        id: 'u1'
+      }
+    }
+  })
+})
+
 test('should support truthy include directive', async t => {
   t.plan(1)
 
